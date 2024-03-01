@@ -1,4 +1,4 @@
-﻿namespace ProyectoApi_Sabado.Entidades
+﻿namespace ProyectoWeb_Sabado.Entidades
 {
     public class Usuario
     {
@@ -15,12 +15,6 @@
 
     public class UsuarioRespuesta
     {
-        public UsuarioRespuesta()
-        {
-            Codigo = "00";
-            Mensaje = string.Empty;
-        }
-
         public string? Codigo { get; set; }
         public string? Mensaje { get; set; }
         public Usuario? Dato { get; set; }

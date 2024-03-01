@@ -1,47 +1,136 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using ProyectoApi_Sabado.Entidades;
-using System.Text;
-using System.Security.Claims;
-using Microsoft.IdentityModel.Tokens;
-using System.IdentityModel.Tokens.Jwt;
-using Microsoft.VisualBasic;
 using Microsoft.AspNetCore.Authorization;
-using ProyectoApi_Sabado.Models;
 using ProyectoApi_Sabado.Services;
+using Dapper;
+using System.Data.SqlClient;
+using System.Data;
+using ProyectoApi_Sabado.Entities;
 
 namespace ProyectoApi_Sabado.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class UsuarioController : ControllerBase
+    public class UsuarioController(IConfiguration _configuration, IUtilitariosModel _utilitariosModel,
+                                   IHostEnvironment _hostEnvironment) : ControllerBase
     {
-        private readonly IUtilitariosModel _utilitariosModel;
-        public UsuarioController(IUtilitariosModel utilitariosModel)
-        {
-            _utilitariosModel = utilitariosModel;
-        }
-
         [AllowAnonymous]
         [HttpPost]
         [Route("IniciarSesion")]
         public IActionResult IniciarSesion(Usuario entidad)
         {
-            if (entidad.cedula == "304590415" && entidad.contrasenna == "secreta")
+            using (var db = new SqlConnection(_configuration.GetConnectionString("DefaultConnection")))
             {
-                return Ok(_utilitariosModel.GenerarToken(entidad.cedula));
-            }
+                UsuarioRespuesta respuesta = new UsuarioRespuesta();
 
-            return NotFound("Sus credenciales no son correctas");
+                var resultado = db.Query<Usuario>("IniciarSesion",
+                    new { entidad.Correo, entidad.Contrasenna },
+                    commandType: CommandType.StoredProcedure).FirstOrDefault();
+
+                if (resultado == null)
+                {
+                    respuesta.Codigo = "-1";
+                    respuesta.Mensaje = "Sus datos no son correctos";
+                }
+                else
+                {
+                    respuesta.Dato = resultado;
+                    respuesta.Dato.Token = _utilitariosModel.GenerarToken(resultado.Correo ?? string.Empty);
+                }
+
+                return Ok(respuesta);
+            }
         }
 
-        [Authorize]
-        [HttpGet]
-        [Route("ConsultarDia")]
-        public IActionResult ConsultarDia()
+        [AllowAnonymous]
+        [HttpPost]
+        [Route("RegistrarUsuario")]
+        public IActionResult RegistrarUsuario(Usuario entidad)
         {
-            var claims = User.Claims;
+            using (var db = new SqlConnection(_configuration.GetConnectionString("DefaultConnection")))
+            {
+                Respuesta respuesta = new Respuesta();
 
-            return Ok(DateTime.Now);
+                var resultado = db.Execute("RegistrarUsuario", 
+                    new { entidad.Correo, entidad.Contrasenna, entidad.NombreUsuario }, 
+                    commandType: CommandType.StoredProcedure);
+
+                if (resultado <= 0)
+                {
+                    respuesta.Codigo = "-1";
+                    respuesta.Mensaje = "Su correo ya se encuentra registrado";
+                }
+
+                return Ok(respuesta);
+
+            }                
+        }
+
+        [AllowAnonymous]
+        [HttpPost]
+        [Route("RecuperarAcceso")]
+        public IActionResult RecuperarAcceso(Usuario entidad)
+        {
+            using (var db = new SqlConnection(_configuration.GetConnectionString("DefaultConnection")))
+            {
+                UsuarioRespuesta respuesta = new UsuarioRespuesta();
+
+                string NuevaContrasenna = _utilitariosModel.GenerarNuevaContrasenna();
+                string Contrasenna = _utilitariosModel.Encrypt(NuevaContrasenna);
+                bool EsTemporal = true;
+
+                var resultado = db.Query<Usuario>("RecuperarAcceso",
+                    new { entidad.Correo, Contrasenna, EsTemporal },
+                    commandType: CommandType.StoredProcedure).FirstOrDefault();
+
+                if (resultado == null)
+                {
+                    respuesta.Codigo = "-1";
+                    respuesta.Mensaje = "Sus datos no son correctos";
+                }
+                else
+                {
+                    string ruta = Path.Combine(_hostEnvironment.ContentRootPath, "Password.html");
+                    string htmlBody = System.IO.File.ReadAllText(ruta);
+                    htmlBody = htmlBody.Replace("@Usuario@", resultado.NombreUsuario);
+                    htmlBody = htmlBody.Replace("@Contrasenna@", NuevaContrasenna);
+
+                    _utilitariosModel.EnviarCorreo(resultado.Correo!, "Nueva Contraseña!!", htmlBody);
+                    respuesta.Dato = resultado;
+                }
+
+                return Ok(respuesta);
+            }
+        }
+
+        [AllowAnonymous]
+        [HttpPost]
+        [Route("CambiarContrasenna")]
+        public IActionResult CambiarContrasenna(Usuario entidad)
+        {
+            using (var db = new SqlConnection(_configuration.GetConnectionString("DefaultConnection")))
+            {
+                UsuarioRespuesta respuesta = new UsuarioRespuesta();
+
+                string Contrasenna = _utilitariosModel.Encrypt(entidad.Contrasenna!);
+                bool EsTemporal = false;
+
+                var resultado = db.Query<Usuario>("RecuperarAcceso",
+                    new { entidad.Correo, Contrasenna, EsTemporal },
+                    commandType: CommandType.StoredProcedure).FirstOrDefault();
+
+                if (resultado == null)
+                {
+                    respuesta.Codigo = "-1";
+                    respuesta.Mensaje = "Sus datos no son correctos";
+                }
+                else
+                {
+                    respuesta.Dato = resultado;
+                }
+
+                return Ok(respuesta);
+            }
         }
 
     }
