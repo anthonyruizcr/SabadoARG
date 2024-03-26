@@ -1,11 +1,11 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using ProyectoApi_Sabado.Entidades;
+﻿using Dapper;
 using Microsoft.AspNetCore.Authorization;
-using ProyectoApi_Sabado.Services;
-using Dapper;
-using System.Data.SqlClient;
-using System.Data;
+using Microsoft.AspNetCore.Mvc;
+using ProyectoApi_Sabado.Entidades;
 using ProyectoApi_Sabado.Entities;
+using ProyectoApi_Sabado.Services;
+using System.Data;
+using System.Data.SqlClient;
 
 namespace ProyectoApi_Sabado.Controllers
 {
@@ -51,8 +51,8 @@ namespace ProyectoApi_Sabado.Controllers
             {
                 Respuesta respuesta = new Respuesta();
 
-                var resultado = db.Execute("RegistrarUsuario", 
-                    new { entidad.Correo, entidad.Contrasenna, entidad.NombreUsuario }, 
+                var resultado = db.Execute("RegistrarUsuario",
+                    new { entidad.Correo, entidad.Contrasenna, entidad.NombreUsuario },
                     commandType: CommandType.StoredProcedure);
 
                 if (resultado <= 0)
@@ -63,7 +63,7 @@ namespace ProyectoApi_Sabado.Controllers
 
                 return Ok(respuesta);
 
-            }                
+            }
         }
 
         [AllowAnonymous]
@@ -104,19 +104,17 @@ namespace ProyectoApi_Sabado.Controllers
         }
 
         [AllowAnonymous]
-        [HttpPost]
+        [HttpPut]
         [Route("CambiarContrasenna")]
         public IActionResult CambiarContrasenna(Usuario entidad)
         {
             using (var db = new SqlConnection(_configuration.GetConnectionString("DefaultConnection")))
             {
                 UsuarioRespuesta respuesta = new UsuarioRespuesta();
-
-                string Contrasenna = _utilitariosModel.Encrypt(entidad.Contrasenna!);
                 bool EsTemporal = false;
 
-                var resultado = db.Query<Usuario>("RecuperarAcceso",
-                    new { entidad.Correo, Contrasenna, EsTemporal },
+                var resultado = db.Query<Usuario>("CambiarContrasenna",
+                    new { entidad.Correo, entidad.Contrasenna, entidad.ContrasennaTemporal, EsTemporal },
                     commandType: CommandType.StoredProcedure).FirstOrDefault();
 
                 if (resultado == null)
